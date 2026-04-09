@@ -1,19 +1,24 @@
 import streamlit as st
-import qrcode
-from PIL import Image
 import io
 import base64
 import pandas as pd
+import requests
 from datetime import date
+from PIL import Image
 
-# ── Page config ──────────────────────────────────────────────────────────────
+# ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Student Proxy Portal",
     page_icon="🎓",
     layout="centered",
 )
 
-# ── Custom CSS ────────────────────────────────────────────────────────────────
+# ── CONFIG — edit these if needed ─────────────────────────────────────────────
+FAST2SMS_API_KEY = "23YnSejaiOGEUwAT14CzKpdqoFJN9IuXRZmMLrfQxl7g5tvk0D4Ltfi926h7zCWHbdsvwlTgR0rJMnF5"
+ADMIN_PHONE      = "6306463334"          # your number
+QR_IMAGE_PATH    = "my_qr.jpeg"         # place in same folder as this script
+
+# ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap');
@@ -35,8 +40,7 @@ footer { display: none !important; }
     border-radius: 20px;
     padding: 2.4rem 2.8rem 2rem;
     margin-bottom: 2rem;
-    position: relative;
-    overflow: hidden;
+    position: relative; overflow: hidden;
 }
 .hero::before {
     content: '';
@@ -48,18 +52,15 @@ footer { display: none !important; }
     display: inline-block;
     background: rgba(99,102,241,0.15);
     border: 1px solid rgba(99,102,241,0.45);
-    color: #a5b4fc;
-    font-size: 0.72rem; font-weight: 500;
+    color: #a5b4fc; font-size: 0.72rem; font-weight: 500;
     letter-spacing: 0.12em; text-transform: uppercase;
-    padding: 0.28rem 0.85rem; border-radius: 50px;
-    margin-bottom: 1rem;
+    padding: 0.28rem 0.85rem; border-radius: 50px; margin-bottom: 1rem;
 }
 .hero-title {
     font-family: 'Syne', sans-serif;
     font-size: clamp(1.9rem, 4vw, 2.6rem);
     font-weight: 800; line-height: 1.15;
-    color: #ffffff; letter-spacing: -0.02em;
-    margin-bottom: 0.5rem;
+    color: #ffffff; letter-spacing: -0.02em; margin-bottom: 0.5rem;
 }
 .hero-title span { color: #818cf8; }
 .hero-sub { font-size: 0.92rem; color: #94a3b8; font-weight: 300; max-width: 480px; }
@@ -71,7 +72,6 @@ footer { display: none !important; }
     color: #6366f1; margin-bottom: 0.7rem; margin-top: 0.5rem;
 }
 
-/* Metric cards */
 [data-testid="metric-container"] {
     background: rgba(99,102,241,0.1) !important;
     border: 1px solid rgba(99,102,241,0.3) !important;
@@ -81,7 +81,6 @@ footer { display: none !important; }
 [data-testid="stMetricLabel"] > div { color: #94a3b8 !important; font-size: 0.78rem !important; }
 [data-testid="stMetricValue"] > div { color: #6ee7b7 !important; font-family: 'Syne', sans-serif !important; }
 
-/* QR wrapper */
 .qr-wrapper {
     background: rgba(255,255,255,0.03);
     border: 1px solid rgba(255,255,255,0.08);
@@ -89,20 +88,88 @@ footer { display: none !important; }
     text-align: center; margin-top: 1rem;
 }
 .qr-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 1.1rem; color: #c7d2fe; margin-bottom: 0.35rem; }
-.qr-sub { color: #64748b; font-size: 0.8rem; margin-bottom: 1.4rem; }
+.qr-sub { color: #64748b; font-size: 0.8rem; margin-bottom: 1.2rem; }
+.qr-name { font-family: 'Syne', sans-serif; font-weight: 600; color: #a5b4fc; font-size: 0.9rem; margin-bottom: 1rem; }
 .qr-steps { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-top: 1.4rem; }
 .qr-step { background: rgba(99,102,241,0.1); border: 1px solid rgba(99,102,241,0.25); border-radius: 8px; padding: 0.4rem 0.9rem; font-size: 0.76rem; color: #a5b4fc; }
 
-/* Form inputs */
+/* ── All text inputs ── */
 .stTextInput > div > div > input {
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.12) !important;
+    background: #1e2235 !important;
+    border: 1.5px solid #3a3f5c !important;
     border-radius: 10px !important;
-    color: #e8e9f0 !important;
+    color: #f1f5f9 !important;
+    font-size: 1rem !important;
+    -webkit-text-fill-color: #f1f5f9 !important;
+    caret-color: #f1f5f9 !important;
 }
-label { color: #94a3b8 !important; font-size: 0.82rem !important; }
+.stTextInput > div > div > input::placeholder {
+    color: #4a5568 !important;
+    -webkit-text-fill-color: #4a5568 !important;
+}
+.stTextInput > div > div > input:focus {
+    border-color: #6366f1 !important;
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.2) !important;
+    outline: none !important;
+}
 
-/* Button */
+/* ── Selectbox ── */
+.stSelectbox > div > div {
+    background: #1e2235 !important;
+    border: 1.5px solid #3a3f5c !important;
+    border-radius: 10px !important;
+    color: #f1f5f9 !important;
+}
+.stSelectbox > div > div > div {
+    color: #f1f5f9 !important;
+    -webkit-text-fill-color: #f1f5f9 !important;
+}
+.stSelectbox svg { fill: #94a3b8 !important; }
+
+/* Selectbox dropdown options */
+[data-baseweb="select"] * { color: #f1f5f9 !important; }
+[data-baseweb="popover"] {
+    background: #1e2235 !important;
+    border: 1px solid #3a3f5c !important;
+}
+[data-baseweb="menu"] { background: #1e2235 !important; }
+[data-baseweb="option"] { background: #1e2235 !important; color: #f1f5f9 !important; }
+[data-baseweb="option"]:hover { background: #2d3352 !important; }
+
+/* ── Date input ── */
+.stDateInput > div > div > input {
+    background: #1e2235 !important;
+    border: 1.5px solid #3a3f5c !important;
+    border-radius: 10px !important;
+    color: #f1f5f9 !important;
+    -webkit-text-fill-color: #f1f5f9 !important;
+}
+.stDateInput > div > div > input::-webkit-calendar-picker-indicator {
+    filter: invert(1) !important;
+}
+
+/* ── All labels ── */
+label, .stTextInput label, .stSelectbox label,
+.stDateInput label, [data-testid="stWidgetLabel"] p {
+    color: #cbd5e1 !important;
+    font-size: 0.85rem !important;
+    font-weight: 500 !important;
+    -webkit-text-fill-color: #cbd5e1 !important;
+}
+
+/* ── Checkbox ── */
+.stCheckbox > label {
+    color: #cbd5e1 !important;
+    font-size: 0.92rem !important;
+    -webkit-text-fill-color: #cbd5e1 !important;
+}
+.stCheckbox > label > span { color: #cbd5e1 !important; -webkit-text-fill-color: #cbd5e1 !important; }
+[data-testid="stCheckbox"] p { color: #cbd5e1 !important; -webkit-text-fill-color: #cbd5e1 !important; }
+
+/* ── Global paragraph/text color fix ── */
+p, span, div { color: inherit; }
+[data-testid="stMarkdownContainer"] p { color: #e2e8f0 !important; }
+
 .stButton > button {
     background: linear-gradient(135deg, #6366f1, #8b5cf6) !important;
     color: #fff !important; border: none !important;
@@ -114,39 +181,61 @@ label { color: #94a3b8 !important; font-size: 0.82rem !important; }
 }
 .stButton > button:hover { opacity: 0.88 !important; }
 
-/* Checkbox */
-.stCheckbox > label { color: #94a3b8 !important; font-size: 0.88rem !important; }
-
-/* Dataframe / table */
-[data-testid="stDataFrame"] { border-radius: 12px !important; overflow: hidden !important; }
-
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: rgba(99,102,241,0.4); border-radius: 3px; }
 </style>
 """, unsafe_allow_html=True)
 
-# ── Data ─────────────────────────────────────────────────────────────────────
+# ── Subjects ──────────────────────────────────────────────────────────────────
 SUBJECTS = {
-    "OS":   {"full": "Operating Systems",              "icon": "🖥️", "cost": 20},
-    "DPPL": {"full": "Design Patterns & Prog. Lang.",  "icon": "🧩", "cost": 20},
-    "DMGT": {"full": "Data Management",                "icon": "🗄️", "cost": 20},
-    "SE":   {"full": "Software Engineering",           "icon": "⚙️", "cost": 20},
-    "DAA":  {"full": "Design & Analysis of Algo.",     "icon": "📐", "cost": 20},
+    "OS":   {"full": "Operating Systems",             "icon": "🖥️", "cost": 20},
+    "DPPL": {"full": "Design Patterns & Prog. Lang.", "icon": "🧩", "cost": 20},
+    "DMGT": {"full": "Data Management",               "icon": "🗄️", "cost": 20},
+    "SE":   {"full": "Software Engineering",          "icon": "⚙️", "cost": 20},
+    "DAA":  {"full": "Design & Analysis of Algo.",    "icon": "📐", "cost": 20},
 }
 
-UPI_ID = "college@upi"   # ← Replace with your real UPI ID
-PAYEE  = "College Proxy Fee"
+# ── SMS helper ────────────────────────────────────────────────────────────────
+def send_sms(message: str) -> bool:
+    try:
+        url = "https://www.fast2sms.com/dev/bulkV2"
+        payload = {
+            "route":   "q",
+            "message": message,
+            "numbers": ADMIN_PHONE,
+        }
+        headers = {
+            "authorization": FAST2SMS_API_KEY,
+            "Content-Type":  "application/json",
+        }
+        r = requests.post(url, json=payload, headers=headers, timeout=10)
+        data = r.json()
+        return data.get("return", False)
+    except Exception:
+        return False
+
+# ── Load QR image as base64 ───────────────────────────────────────────────────
+def load_qr_b64(path: str) -> str:
+    try:
+        img = Image.open(path).convert("RGB")
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=90)
+        return base64.b64encode(buf.getvalue()).decode()
+    except Exception:
+        return ""
+
+qr_b64 = load_qr_b64(QR_IMAGE_PATH)
 
 # ── Hero ──────────────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="hero">
   <div class="hero-badge">🎓 Academic Services Portal</div>
   <div class="hero-title">Student <span>Proxy</span><br>Application</div>
-  <div class="hero-sub">Select subjects, pay the fee via QR, and submit your proxy request in minutes.</div>
+  <div class="hero-sub">Select subjects, scan & pay the fee, then submit your proxy request.</div>
 </div>
 """, unsafe_allow_html=True)
 
-# ── Step 1 – Student Info ─────────────────────────────────────────────────────
+# ── Step 1 ────────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-label">Step 1 — Student Details</div>', unsafe_allow_html=True)
 
 col1, col2 = st.columns(2)
@@ -163,7 +252,7 @@ with col4:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ── Step 2 – Subject Selection ────────────────────────────────────────────────
+# ── Step 2 ────────────────────────────────────────────────────────────────────
 st.markdown('<div class="section-label">Step 2 — Select Subjects</div>', unsafe_allow_html=True)
 
 selected = []
@@ -173,36 +262,29 @@ for code, info in SUBJECTS.items():
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# ── Step 3 – Summary & QR ────────────────────────────────────────────────────
-st.markdown('<div class="section-label">Step 3 — Payment Summary</div>', unsafe_allow_html=True)
+# ── Step 3 ────────────────────────────────────────────────────────────────────
+st.markdown('<div class="section-label">Step 3 — Payment Summary & QR</div>', unsafe_allow_html=True)
 
 total = sum(SUBJECTS[c]["cost"] for c in selected)
 
 if selected:
     subject_list = ", ".join(selected)
 
-    # ── Summary table using pandas (avoids raw HTML rendering bug) ──
-    table_rows = [
-        {
-            "Subject": f"{SUBJECTS[c]['icon']} {c}",
-            "Description": SUBJECTS[c]["full"],
-            "Amount (₹)": SUBJECTS[c]["cost"],
-        }
+    # Summary table
+    df = pd.DataFrame([
+        {"Subject": f"{SUBJECTS[c]['icon']} {c}", "Description": SUBJECTS[c]["full"], "Amount (₹)": SUBJECTS[c]["cost"]}
         for c in selected
-    ]
-    df = pd.DataFrame(table_rows)
+    ])
     st.dataframe(
-        df,
-        use_container_width=True,
-        hide_index=True,
+        df, use_container_width=True, hide_index=True,
         column_config={
-            "Subject":      st.column_config.TextColumn("Subject", width="small"),
-            "Description":  st.column_config.TextColumn("Description"),
-            "Amount (₹)":   st.column_config.NumberColumn("Amount (₹)", format="₹%d"),
+            "Subject":     st.column_config.TextColumn("Subject", width="small"),
+            "Description": st.column_config.TextColumn("Description"),
+            "Amount (₹)":  st.column_config.NumberColumn("Amount (₹)", format="₹%d"),
         },
     )
 
-    # ── Metric row ──
+    # Metrics
     m1, m2, m3 = st.columns(3)
     m1.metric("Subjects Selected", len(selected))
     m2.metric("Rate per Subject",  "₹20")
@@ -210,50 +292,33 @@ if selected:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Generate QR code ─────────────────────────────────────────────────────
-    upi_url = (
-        f"upi://pay?pa={UPI_ID}"
-        f"&pn={PAYEE.replace(' ', '%20')}"
-        f"&am={total}&cu=INR"
-        f"&tn=Proxy:{subject_list.replace(' ', '%20')}"
-    )
-
-    qr = qrcode.QRCode(
-        version=1,
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=8,
-        border=3,
-    )
-    qr.add_data(upi_url)
-    qr.make(fit=True)
-    img = qr.make_image(fill_color="#1e1b4b", back_color="#ffffff")
-
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode()
-
-    st.markdown(f"""
-    <div class="qr-wrapper">
-        <div class="qr-title">📲 Scan to Pay ₹{total}</div>
-        <div class="qr-sub">Use any UPI app — PhonePe, GPay, Paytm, BHIM</div>
-        <img src="data:image/png;base64,{b64}"
-             style="width:210px;height:210px;border-radius:12px;
-                    box-shadow:0 8px 32px rgba(0,0,0,0.5);" />
-        <div class="qr-steps">
-            <span class="qr-step">1 · Open UPI App</span>
-            <span class="qr-step">2 · Scan QR Code</span>
-            <span class="qr-step">3 · Pay ₹{total}</span>
-            <span class="qr-step">4 · Submit Below</span>
+    # ── Your QR code ─────────────────────────────────────────────────────────
+    if qr_b64:
+        st.markdown(f"""
+        <div class="qr-wrapper">
+            <div class="qr-title">📲 Scan to Pay ₹{total}</div>
+            <div class="qr-name">Mr Ansh Verma &nbsp;·&nbsp; 6306463334@pthdfc</div>
+            <div class="qr-sub">Use PhonePe · GPay · Paytm · BHIM · any UPI app</div>
+            <img src="data:image/jpeg;base64,{qr_b64}"
+                 style="width:240px;height:auto;border-radius:16px;
+                        box-shadow:0 8px 32px rgba(0,0,0,0.55);" />
+            <div class="qr-steps">
+                <span class="qr-step">1 · Open UPI App</span>
+                <span class="qr-step">2 · Scan QR Code</span>
+                <span class="qr-step">3 · Pay ₹{total}</span>
+                <span class="qr-step">4 · Submit Below</span>
+            </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+    else:
+        st.warning("⚠️ QR image not found. Place `my_qr.jpeg` in the same folder as the script.")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # ── Step 4 – Confirm & Submit ─────────────────────────────────────────────
+    # ── Step 4 ───────────────────────────────────────────────────────────────
     st.markdown('<div class="section-label">Step 4 — Confirm & Submit</div>', unsafe_allow_html=True)
 
-    txn_id = st.text_input("UPI Transaction ID", placeholder="Enter 12-digit transaction ID after payment")
+    txn_id  = st.text_input("UPI Transaction ID", placeholder="Enter transaction ID after payment")
     confirm = st.checkbox(f"I confirm that payment of ₹{total} has been made successfully.")
 
     if st.button("🚀  Submit Proxy Application", use_container_width=True):
@@ -266,6 +331,18 @@ if selected:
         elif not confirm:
             st.error("⚠️ Please confirm payment before submitting.")
         else:
+            # ── Send SMS to admin ─────────────────────────────────────────
+            sms_text = (
+                f"NEW PROXY REQUEST\n"
+                f"Name: {student_name}\n"
+                f"Roll: {roll_no} | Div: {division}\n"
+                f"Date: {proxy_date}\n"
+                f"Subjects: {subject_list}\n"
+                f"Amount: Rs.{total}\n"
+                f"Txn ID: {txn_id}"
+            )
+            sms_sent = send_sms(sms_text)
+
             st.success(
                 f"✅ **Proxy application submitted successfully!**\n\n"
                 f"**Student:** {student_name}  |  **Roll No:** {roll_no}\n\n"
@@ -273,6 +350,12 @@ if selected:
                 f"**Subjects:** {subject_list}\n\n"
                 f"**Amount Paid:** ₹{total}  |  **Txn ID:** {txn_id}"
             )
+
+            if sms_sent:
+                st.info("📱 SMS notification sent to your phone successfully!")
+            else:
+                st.warning("⚠️ Submission saved but SMS could not be sent. Check your Fast2SMS API key or balance.")
+
             st.balloons()
 
 else:
@@ -281,7 +364,7 @@ else:
                 border-radius:14px;padding:2rem;text-align:center;">
         <div style="font-size:2rem;margin-bottom:0.6rem;">📚</div>
         <div style="font-family:'Syne',sans-serif;font-weight:600;color:#64748b;font-size:0.92rem;">
-            Select at least one subject above to see the payment summary and QR code.
+            Select at least one subject above to see the payment QR and summary.
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -290,6 +373,6 @@ else:
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("""
 <div style="text-align:center;color:#334155;font-size:0.75rem;">
-    Student Proxy Portal &nbsp;·&nbsp; Academic Services &nbsp;·&nbsp; 2025
+    Student Proxy Portal &nbsp;·&nbsp; Mr Ansh Verma &nbsp;·&nbsp; 2025
 </div>
 """, unsafe_allow_html=True)
