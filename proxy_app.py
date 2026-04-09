@@ -197,21 +197,24 @@ SUBJECTS = {
 
 # ── SMS helper ────────────────────────────────────────────────────────────────
 def send_sms(message: str) -> bool:
+    """Send SMS via Fast2SMS using quick transactional route."""
     try:
         url = "https://www.fast2sms.com/dev/bulkV2"
-        payload = {
-            "route":   "q",
-            "message": message,
-            "numbers": ADMIN_PHONE,
-        }
-        headers = {
+        # Use GET-style params — most reliable for Fast2SMS free accounts
+        params = {
             "authorization": FAST2SMS_API_KEY,
-            "Content-Type":  "application/json",
+            "route":         "q",
+            "numbers":       ADMIN_PHONE,
+            "message":       message,
+            "flash":         0,
         }
-        r = requests.post(url, json=payload, headers=headers, timeout=10)
+        r = requests.get(url, params=params, timeout=15)
         data = r.json()
+        # Log full response to console for debugging
+        print("Fast2SMS response:", data)
         return data.get("return", False)
-    except Exception:
+    except Exception as e:
+        print("Fast2SMS error:", e)
         return False
 
 # ── Load QR image as base64 ───────────────────────────────────────────────────
@@ -354,7 +357,12 @@ if selected:
             if sms_sent:
                 st.info("📱 SMS notification sent to your phone successfully!")
             else:
-                st.warning("⚠️ Submission saved but SMS could not be sent. Check your Fast2SMS API key or balance.")
+                st.warning(
+                    "⚠️ SMS could not be sent. **Common fixes:**\n\n"
+                    "1. Go to [fast2sms.com](https://fast2sms.com) → Login → Check your **wallet balance** (needs at least ₹1)\n"
+                    "2. Make sure your number **6306463334** is verified in Fast2SMS dashboard\n"
+                    "3. Check the terminal/console where Streamlit is running — it shows the exact API error message"
+                )
 
             st.balloons()
 
